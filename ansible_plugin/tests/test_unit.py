@@ -47,13 +47,14 @@ class TestAnsiblePluginUnitTests(testtools.TestCase):
         testname = __name__
         ctx = self.get_mock_context(testname)
         current_ctx.set(ctx=ctx)
+        user = 'fglaser'
 
-        ctx.instance.runtime_properties['key'] = '~/.ssh/agent_key.pem'
-        ctx.instance.runtime_properties['user'] = os.getlogin()
+        ctx.instance.runtime_properties['key'] = '~/.ssh/cloudify-agent-kp.pem'
+        ctx.instance.runtime_properties['user'] = user
         tasks.configure(ctx=ctx)
         self.assertEqual(os.environ.get('ANSIBLE_CONFIG'),
                          os.path.expanduser('~/.ansible.cfg'))
-        self.assertEqual(os.environ.get('USER'), os.getlogin())
+        self.assertEqual(os.environ.get('USER'), user)
         self.assertEqual(os.environ.get('HOME'), os.path.expanduser('~'))
         configuration = '[defaults]\n' \
                         'host_key_checking=False\n' \
@@ -63,13 +64,14 @@ class TestAnsiblePluginUnitTests(testtools.TestCase):
         with open(os.environ.get('ANSIBLE_CONFIG'), 'r') as f:
             content = f.read()
         self.assertEqual(content, configuration)
+        
 
     def test_configure_operation_no_user(self):
         testname = __name__
         ctx = self.get_mock_context(testname)
         current_ctx.set(ctx=ctx)
 
-        ctx.instance.runtime_properties['key'] = '~/.ssh/agent_key.pem'
+        ctx.instance.runtime_properties['key'] = '~/.ssh/cloudify-agent-kp.pem'
         ex = self.assertRaises(TypeError, tasks.configure, ctx=ctx)
         self.assertIn('must be string, not None', ex.message)
 
@@ -77,8 +79,9 @@ class TestAnsiblePluginUnitTests(testtools.TestCase):
         testname = __name__
         ctx = self.get_mock_context(testname)
         current_ctx.set(ctx=ctx)
+        user = 'fabianglaser'
 
-        ctx.instance.runtime_properties['user'] = os.getlogin()
+        ctx.instance.runtime_properties['user'] = user
         ex = self.assertRaises(AttributeError, tasks.configure, ctx=ctx)
         self.assertIn("'NoneType' object has no attribute 'startswith'",
                       ex.message)

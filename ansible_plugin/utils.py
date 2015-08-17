@@ -16,6 +16,7 @@
 # Built-in Imports
 import os
 import tempfile
+import shutil
 from subprocess import Popen, PIPE
 
 # Third-party Imports
@@ -27,10 +28,31 @@ from cloudify import exceptions
 CLOUDIFY_MANAGER_PRIVATE_KEY_PATH = 'CLOUDIFY_MANAGER_PRIVATE_KEY_PATH'
 
 
-def get_playbook_path(playbook):
+def get_executible_path(executable_name):
+
+    """home = os.path.expanduser("~")
+    deployment_home = \
+        os.path.join(home, '{}{}'.format('cloudify.', ctx.deployment.id))
+
+    return os.path.join(deployment_home, 'env', 'bin', executible_name)
+    """
+    return executable_name
+
+def get_roles(roles, target_path):
+    try:
+        path_to_file = ctx.download_resource(roles, os.path.join(target_path, roles))
+    except exceptions.HttpException as e:
+        raise exceptions.NonRecoverableError(
+            'Could not get roles file: {}.'.format(str(e)))
+
+    return path_to_file
+
+
+
+def get_playbook_path(playbook, target_path):
 
     try:
-        path_to_file = ctx.download_resource(playbook)
+        path_to_file = ctx.download_resource(playbook, os.path.join(target_path, playbook))
     except exceptions.HttpException as e:
         raise exceptions.NonRecoverableError(
             'Could not get playbook file: {}.'.format(str(e)))
@@ -38,12 +60,11 @@ def get_playbook_path(playbook):
     return path_to_file
 
 
-def get_inventory_path(inventory):
-
+def get_inventory_path(inventory, target_path):
+    path_to_file = os.path.join(target_path, '{}.inventory'.format(ctx.deployment.id))
+    
     if not inventory:
         inventory.append(ctx.instance.host_ip)
-
-    _, path_to_file = tempfile.mkstemp()
 
     with open(path_to_file, 'w') as f:
         for host in inventory:
@@ -66,30 +87,32 @@ def get_agent_user(user=None):
     return user
 
 
-def get_keypair_path(key=None):
-
-    if not key:
-        if 'key' in ctx.instance.runtime_properties:
-            key = ctx.instance.runtime_properties['key']
-        elif CLOUDIFY_MANAGER_PRIVATE_KEY_PATH in os.environ:
-            key = os.environ[CLOUDIFY_MANAGER_PRIVATE_KEY_PATH]
-        else:
-            key = ctx.bootstrap_context.cloudify_agent.agent_key_path
-
-    if 'key' not in ctx.instance.runtime_properties:
-        ctx.instance.runtime_properties['key'] = key
-
-    key = os.path.expanduser(key)
-    os.chmod(key, 0600)
-
-    return key
-
-
-def write_configuration_file(config):
+def get_keypair_path(keypair):
 
     home = os.path.expanduser("~")
+    path_to_file = \
+        os.path.join(home, '.ssh', keypair)
 
-    file_path = os.path.join(home, '.ansible.cfg')
+    if not os.path.exists(path_to_file):
+        raise exceptions.RecoverableError(
+            'Keypair file does not exist.')
+    
+    ansible_home = get_ansible_home()
+    target_path = os.path.join(ansible_home, keypair)
+    
+    if not os.path.exists(ansible_home):
+        os.makedirs(ansible_home)
+        ctx.logger.info('Created folder for ansible scripts: {}'.format(ansible_home))
+    
+    if not os.path.isfile(target_path):
+        shutil.copy2(path_to_file, target_path)
+
+    return target_path
+
+
+def write_configuration_file(path, config):
+
+    file_path = os.path.join(path, 'ansible.cfg')
 
     with open(file_path, 'w') as f:
         f.write(config)
@@ -116,3 +139,10 @@ def run_command(command):
             'Non-zero returncode. Output {}.'.format(output))
 
     return output
+
+def get_ansible_home():
+    home = os.path.expanduser("~")
+    return os.path.join(home, '{}{}'.format('cloudify.', ctx.deployment.id), '{}'.format(ctx.instance.id))
+
+
+

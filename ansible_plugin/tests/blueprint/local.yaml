@@ -12,10 +12,15 @@ inputs:
     default: 'ubuntu'
 
   key_file:
-    default: '~/.ssh/agent_key.pem'
+    default: '~/.ssh/cloudify-agend-kp.pem'
 
   host_ip:
     default: '127.0.0.1'
+    
+  roles_file:
+    description: >
+      The name of a zip file containing ansible roles
+    default: 'roles.zip'
 
 node_types:
 
@@ -28,7 +33,7 @@ node_types:
           inputs:
             user:
               default: {}
-            key:
+            keypair:
               default: {}
         start:
           implementation: ansible.ansible_plugin.tasks.ansible_playbook
@@ -55,12 +60,14 @@ node_templates:
           implementation: ansible.ansible_plugin.tasks.configure
           inputs:
             user: { get_property: [ host, cloudify_agent, user ] }
-            key: { get_property: [ host, cloudify_agent, key ] }
+            keypair: { get_input: key_file }
+            playbook: 'apache.yaml'
+            roles: {  get_input: roles_file }
+            private_ip_address: { get_input: host_ip }
         start:
           implementation: ansible.ansible_plugin.tasks.ansible_playbook
           inputs:
-            playbooks:
-              - { get_input: playbook_file }
+            playbook: { get_input: playbook_file }
     relationships:
       - type: cloudify.relationships.contained_in
         target: host

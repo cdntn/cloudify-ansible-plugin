@@ -26,43 +26,84 @@ from cloudify.decorators import operation
 
 
 @operation
-def configure(user=None, key=None, **kwargs):
+def configure(user, keypair, playbook, roles, private_ip_address, **kwargs):
 
-    agent_key_path = utils.get_keypair_path(key)
+    ctx.logger.info('Configuring Ansible.')
+    
+    os.environ['USER'] = user
+    os.environ['HOME'] = home = os.path.expanduser("~")
+    
+    ansible_home = utils.get_ansible_home()
+    
+    if not os.path.exists(ansible_home):
+        os.makedirs(ansible_home)
+        ctx.logger.info('Created folder for ansible scripts: {}'.format(ansible_home))
 
+    ctx.logger.info('Getting the path to the keypair.')
+    path_to_key = utils.get_keypair_path(keypair)
+    os.chmod(path_to_key, 0600)
+    ctx.logger.info('Got the keypair path: {}'.format(path_to_key))
+
+        
     configuration = '[defaults]\n' \
                     'host_key_checking=False\n' \
-                    'private_key_file={0}\n'.format(agent_key_path)
-
-    ctx.logger.info('Configuring Anisble.')
-    file_path = utils.write_configuration_file(configuration)
+            'remote_user={0}\n'\
+                    'private_key_file={1}\n'\
+                    '[ssh_connection]\n'\
+                    'control_path=%(directory)s/%%h-%%r\n'.format(user, path_to_key)
+    
+    file_path = utils.write_configuration_file(ansible_home, configuration)
+    
+    ctx.logger.info('Getting the path to the playbook.')
+    playbook_path = utils.get_playbook_path(playbook, ansible_home)
+    ctx.logger.info('Got the playbook path: {}.'.format(playbook_path))
+    
+    ctx.logger.info('Upload the roles file.')
+    roles_path = utils.get_roles(roles, ansible_home)
+    ctx.logger.info('Got the roles path: {}'.format(roles_path))
+    
+    ctx.logger.info('Unzip the roles file.')
+    command = ['unzip', '-o', roles_path,'-d', os.path.dirname(roles_path)] 
+    ctx.logger.info('Running command: {}.'.format(command))
+    output = utils.run_command(command)
+    ctx.logger.info('Command Output: {}.'.format(output))
+    
+    ctx.logger.info('Delete the roles archive.')
+    os.remove(roles_path)
+    """command = ['rm', '-rf', roles_path]
+    ctx.logger.info('Running command: {}.'.format(command))
+    output = utils.run_command(command)
+    ctx.logger.info('Command Output: {}.'.format(output))
+    """
+    ctx.logger.info('Getting the inventory path.')
+    ips = [private_ip_address]
+    inventory_path = utils.get_inventory_path(ips, os.path.dirname(playbook_path))
+    ctx.logger.info('Got the inventory path: {}.'.format(inventory_path))
+    
     ctx.logger.info('Configured Ansible.')
-
-    os.environ['ANSIBLE_CONFIG'] = file_path
-    os.environ['USER'] = utils.get_agent_user(user)
-    os.environ['HOME'] = home = os.path.expanduser("~")
-
-    if os.path.exists(os.path.join(home, '.ansible')):
-        shutil.rmtree(os.path.join(home, '.ansible'))
-
-    os.makedirs(os.path.join(home, '.ansible'))
 
 
 @operation
-def ansible_playbook(playbooks, inventory=list(), **kwargs):
+def ansible_playbook(playbook, **kwargs):
     """ Runs a playbook as part of a Cloudify lifecycle operation """
+    ansible_home = utils.get_ansible_home()
 
-    inventory_path = utils.get_inventory_path(inventory)
-    ctx.logger.info('Inventory path: {0}.'.format(inventory_path))
+    executible = utils.get_executible_path('ansible-playbook')
+    inventory_path = os.path.join(ansible_home, '{}.inventory'.format(ctx.deployment.id))
+    playbook_path = os.path.join(ansible_home, playbook)
+    
+    os.environ['HOME'] = ansible_home
+    os.environ['ANSIBLE_CONFIG'] = os.path.join(ansible_home, 'ansible.cfg')
+    
+    command = [executible, '-i', inventory_path,
+               playbook_path, '--timeout=60', '-vvvv']
 
-    for playbook in playbooks:
-        playbook_path = utils.get_playbook_path(playbook)
-        ctx.logger.info('Playbook path: {0}.'.format(playbook_path))
-        user = utils.get_agent_user()
-        command = ['ansible-playbook', '--sudo', '-u', user,
-                   '-i', inventory_path, playbook_path,
-                   '--timeout=60', '-vvvv']
-        ctx.logger.info('Running command: {0}.'.format(command))
-        output = utils.run_command(command)
-        ctx.logger.info('Command Output: {0}.'.format(output))
-        ctx.logger.info('Finished running the Ansible Playbook.')
+    ctx.logger.info('Running command: {}.'.format(command))
+
+    output = utils.run_command(command)
+
+    ctx.logger.info('Command Output: {}.'.format(output))
+
+    ctx.logger.info('Finished running the Ansible Playbook.')
+    
+    del os.environ['HOME']

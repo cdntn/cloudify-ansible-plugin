@@ -57,14 +57,15 @@ class TestAnsiblePlugin(testtools.TestCase):
         """ get the user """
 
         if not user:
-            user = os.getlogin()
+            #user = os.getlogin()
+            user = 'fglaser'
         return user
 
     def _key(self, user, key=None):
         """ get the path to the key """
 
         if not key:
-            key = os.path.expanduser('~/.ssh/agent_key.pem')
+            key = os.path.expanduser('~/.ssh/cloudify-agent-kp.pem')
         return key
 
     def _run(self, user=None, key=None,

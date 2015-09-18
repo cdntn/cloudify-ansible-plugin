@@ -18,7 +18,7 @@ import os
 
 from cloudify.workflows import local
 import testtools
-
+from ansible_plugin import tasks
 
 IGNORE = (
     'worker_installer.tasks',

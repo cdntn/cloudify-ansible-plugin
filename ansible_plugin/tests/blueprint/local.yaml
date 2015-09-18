@@ -61,13 +61,13 @@ node_templates:
           inputs:
             user: { get_property: [ host, cloudify_agent, user ] }
             keypair: { get_input: key_file }
-            playbook: 'apache.yaml'
-            roles: {  get_input: roles_file }
+            roles: 
+              - testrole01
+              - testrole02
+            rolesfile: {  get_input: roles_file }
             private_ip_address: { get_input: host_ip }
         start:
           implementation: ansible.ansible_plugin.tasks.ansible_playbook
-          inputs:
-            playbook: { get_input: playbook_file }
     relationships:
       - type: cloudify.relationships.contained_in
         target: host

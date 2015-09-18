@@ -1,0 +1,308 @@
+tosca_definitions_version: cloudify_dsl_1_0
+
+imports:
+  - http://www.getcloudify.org/spec/cloudify/3.1/types.yaml
+  - http://www.getcloudify.org/spec/openstack-plugin/1.1/plugin.yaml
+  - http://user.informatik.uni-goettingen.de/~fglaser/cloudify-ansible-plugin/plugin.yaml
+
+# Input values, need to be hardcoded
+inputs:
+  image:
+    description: >
+      Image to be used when launching agent VM's
+    default: 6fa2f3e9-a7d9-4fdf-bc92-3b7dc4c6e749
+  flavor:
+    description: >
+      Flavor of the agent VM's
+    default: 3
+  agent_user:
+    description: >
+      User for connecting to agent VM's
+    default: ubuntu
+  playbook_file:
+    default: 'apache.yaml'
+  key_file:
+    default: '/home/ubuntu/.ssh/cloudify-agent-kp.pem'
+  host_ip:
+    default: '127.0.0.1'
+  roles_file:
+    description: >
+      The name of a zip file containing ansible roles
+    default: 'roles.zip'
+    
+node_types:
+  ansible.nodes.Application:
+    derived_from: cloudify.nodes.ApplicationModule
+    interfaces:
+      cloudify.interfaces.lifecycle:
+        configure:
+          implementation: ansible.ansible_plugin.tasks.configure
+          inputs:
+            user:
+              default: {}
+            keypair:
+              default: {}
+        start:
+          implementation: ansible.ansible_plugin.tasks.ansible_playbook
+          inputs:
+            playbooks:
+              default: []
+          
+  swe.uml2tosca.nodes.VirtualMachine:
+    derived_from: cloudify.openstack.nodes.Server
+     
+  swe.uml2tosca.nodes.HadoopMaster:
+    derived_from: swe.uml2tosca.nodes.VirtualMachine
+     
+  swe.uml2tosca.nodes.HadoopWorker:
+    derived_from: swe.uml2tosca.nodes.VirtualMachine
+    
+  swe.uml2tosca.nodes.ExecutionEnvironment:
+    derived_from: ansible.nodes.Application
+    
+  swe.uml2tosca.nodes.Artifact:
+    derived_from: ansible.nodes.Application
+
+# Template section
+# Host Definitions
+node_templates:
+  swe.uml2tosca.instances.HadoopMaster:
+    type: swe.uml2tosca.nodes.HadoopMaster
+    properties:
+      cloudify_agent:
+        user: { get_input: agent_user }
+      server:
+        image: "6fa2f3e9-a7d9-4fdf-bc92-3b7dc4c6e749"
+        flavor: 3
+    relationships:
+      - target: swe.uml2tosca.instances.FloatingIP
+        type: cloudify.openstack.server_connected_to_floating_ip
+      - target: swe.uml2tosca.instances.HadoopMasterSecurityGroupIngress
+        type: cloudify.openstack.server_connected_to_security_group
+      - target: swe.uml2tosca.instances.HadoopMasterSecurityGroupEgress
+        type: cloudify.openstack.server_connected_to_security_group
+    
+  swe.uml2tosca.instances.HadoopWorker01:
+    type: swe.uml2tosca.nodes.HadoopWorker
+    properties:
+      cloudify_agent:
+         user: { get_input: agent_user }
+      server:
+        image: "6fa2f3e9-a7d9-4fdf-bc92-3b7dc4c6e749"
+        flavor: 2
+    relationships:
+      - target: swe.uml2tosca.instances.HadoopWorkerSecurityGroupIngress
+        type: cloudify.openstack.server_connected_to_security_group
+      - target: swe.uml2tosca.instances.HadoopWorkerSecurityGroupEgress
+        type: cloudify.openstack.server_connected_to_security_group
+        
+    
+  swe.uml2tosca.instances.HadoopWorker02:
+    type: swe.uml2tosca.nodes.HadoopWorker
+    properties:
+      cloudify_agent:
+         user: { get_input: agent_user }
+      server:
+        image: "6fa2f3e9-a7d9-4fdf-bc92-3b7dc4c6e749"
+        flavor: 2
+    relationships:
+      - target: swe.uml2tosca.instances.HadoopWorkerSecurityGroupIngress
+        type: cloudify.openstack.server_connected_to_security_group
+      - target: swe.uml2tosca.instances.HadoopWorkerSecurityGroupEgress
+        type: cloudify.openstack.server_connected_to_security_group
+        
+  swe.uml2tosca.instances.HadoopWorker03:
+    type: swe.uml2tosca.nodes.HadoopWorker
+    properties:
+      cloudify_agent:
+         user: { get_input: agent_user }
+      server:
+        image: "6fa2f3e9-a7d9-4fdf-bc92-3b7dc4c6e749"
+        flavor: 2
+    relationships:
+      - target: swe.uml2tosca.instances.HadoopWorkerSecurityGroupIngress
+        type: cloudify.openstack.server_connected_to_security_group
+      - target: swe.uml2tosca.instances.HadoopWorkerSecurityGroupEgress
+        type: cloudify.openstack.server_connected_to_security_group
+       
+  swe.uml2tosca.instances.FloatingIP:
+    type: cloudify.openstack.nodes.FloatingIP
+    
+  swe.uml2tosca.instances.HadoopMasterSecurityGroupIngress:
+    type: cloudify.openstack.nodes.SecurityGroup
+    properties:
+      security_group:
+        name: HadoopMasterSecurityGroupIngress
+      rules: 
+      - remote_group_node: swe.uml2tosca.instances.HadoopWorkerSecurityGroupEgress
+        port: 8020
+      - remote_group_node: swe.uml2tosca.instances.HadoopWorkerSecurityGroupEgress
+        port: 8021 
+      - remote_group_node: swe.uml2tosca.instances.HadoopWorkerSecurityGroupEgress
+        port: 9000
+      - remote_group_node: swe.uml2tosca.instances.HadoopWorkerSecurityGroupEgress
+        port: 8012   
+        # Nicht in UML modelliert, aber notwendig für den Zugriff von außen        
+      - remote_ip_prefix: 0.0.0.0/0
+        port: 22
+      - remote_ip_prefix: 0.0.0.0/0
+        port: 50070
+      - remote_ip_prefix: 0.0.0.0/0
+        port: 5003
+    relationships:
+      - target: swe.uml2tosca.instances.HadoopWorkerSecurityGroupEgress
+        type: cloudify.relationships.connected_to
+        
+  swe.uml2tosca.instances.HadoopWorkerSecurityGroupIngress:
+    type: cloudify.openstack.nodes.SecurityGroup
+    properties:
+      security_group:
+        name: HadoopWorkerSecurityGroupIngress
+      rules:
+      - remote_group_node: swe.uml2tosca.instances.HadoopMasterSecurityGroupEgress
+        port: 50010
+      - remote_group_node: swe.uml2tosca.instances.HadoopMasterSecurityGroupEgress
+        port: 50020
+    relationships:
+      - target: swe.uml2tosca.instances.HadoopMasterSecurityGroupEgress
+        type: cloudify.relationships.connected_to
+  
+  swe.uml2tosca.instances.HadoopMasterSecurityGroupEgress:
+    type: cloudify.openstack.nodes.SecurityGroup
+    properties:
+      security_group:
+        name: HadoopMasterSecurityGroupEgress
+    
+  swe.uml2tosca.instances.HadoopWorkerSecurityGroupEgress:
+    type: cloudify.openstack.nodes.SecurityGroup
+    properties:
+      security_group:
+        name: HadoopWorkerSecurityGroupEgress
+    
+  swe.uml2tosca.instances.MasterJEE:
+    type: swe.uml2tosca.nodes.ExecutionEnvironment
+    interfaces:
+      cloudify.interfaces.lifecycle:
+        configure:
+          implementation: ansible.ansible_plugin.tasks.configure
+          inputs:
+            user: { get_property: [ swe.uml2tosca.instances.HadoopMaster, cloudify_agent, user ] }
+            keypair: { get_input: key_file }
+            playbook: 'apache.yaml'
+            roles: {  get_input: roles_file }
+            private_ip_address: { get_attribute: [swe.uml2tosca.instances.HadoopMaster, ip] }
+        start:
+          implementation: ansible.ansible_plugin.tasks.ansible_playbook
+          inputs:
+            playbook: { get_input: playbook_file }
+    relationships:
+      - type: cloudify.relationships.contained_in
+        target: swe.uml2tosca.instances.HadoopMaster
+    
+  swe.uml2tosca.instances.NameNode:
+    type: swe.uml2tosca.nodes.Artifact
+    interfaces:
+      cloudify.interfaces.lifecycle:
+        configure:
+          implementation: ansible.ansible_plugin.tasks.configure
+          inputs:
+            user: { get_property: [ swe.uml2tosca.instances.HadoopMaster, cloudify_agent, user ] }
+            keypair: { get_input: key_file }
+            playbook: 'apache.yaml'
+            roles: {  get_input: roles_file }
+            private_ip_address: { get_attribute: [swe.uml2tosca.instances.HadoopMaster, ip] }
+        start:
+          implementation: ansible.ansible_plugin.tasks.ansible_playbook
+          inputs:
+            playbook: { get_input: playbook_file }
+    relationships:
+      - type: cloudify.relationships.contained_in
+        target: swe.uml2tosca.instances.HadoopMaster
+      - type: cloudify.relationships.depends_on
+        target: swe.uml2tosca.instances.MasterJEE
+        
+  swe.uml2tosca.instances.JobTracker:
+    type: swe.uml2tosca.nodes.Artifact
+    interfaces:
+      cloudify.interfaces.lifecycle:
+        configure:
+          implementation: ansible.ansible_plugin.tasks.configure
+          inputs:
+            user: { get_property: [ swe.uml2tosca.instances.HadoopMaster, cloudify_agent, user ] }
+            keypair: { get_input: key_file }
+            playbook: 'apache.yaml'
+            roles: {  get_input: roles_file }
+            private_ip_address: { get_attribute: [swe.uml2tosca.instances.HadoopMaster, ip] }
+        start:
+          implementation: ansible.ansible_plugin.tasks.ansible_playbook
+          inputs:
+            playbook: { get_input: playbook_file }
+    relationships:
+      - type: cloudify.relationships.contained_in
+        target: swe.uml2tosca.instances.HadoopMaster
+      - type: cloudify.relationships.depends_on
+        target: swe.uml2tosca.instances.MasterJEE
+        
+  swe.uml2tosca.instances.Worker01JEE:
+    type: swe.uml2tosca.nodes.ExecutionEnvironment
+    interfaces:
+      cloudify.interfaces.lifecycle:
+        configure:
+          implementation: ansible.ansible_plugin.tasks.configure
+          inputs:
+            user: { get_property: [ swe.uml2tosca.instances.HadoopMaster, cloudify_agent, user ] }
+            keypair: { get_input: key_file }
+            playbook: 'apache.yaml'
+            roles: {  get_input: roles_file }
+            private_ip_address: { get_attribute: [swe.uml2tosca.instances.HadoopMaster, ip] }
+        start:
+          implementation: ansible.ansible_plugin.tasks.ansible_playbook
+          inputs:
+            playbook: { get_input: playbook_file }
+    relationships:
+      - type: cloudify.relationships.contained_in
+        target: swe.uml2tosca.instances.HadoopWorker01
+    
+  swe.uml2tosca.instances.Worker01.DataNode:
+    type: swe.uml2tosca.nodes.Artifact
+    interfaces:
+      cloudify.interfaces.lifecycle:
+        configure:
+          implementation: ansible.ansible_plugin.tasks.configure
+          inputs:
+            user: { get_property: [ swe.uml2tosca.instances.HadoopMaster, cloudify_agent, user ] }
+            keypair: { get_input: key_file }
+            playbook: 'apache.yaml'
+            roles: {  get_input: roles_file }
+            private_ip_address: { get_attribute: [swe.uml2tosca.instances.HadoopMaster, ip] }
+        start:
+          implementation: ansible.ansible_plugin.tasks.ansible_playbook
+          inputs:
+            playbook: { get_input: playbook_file }
+    relationships:
+      - type: cloudify.relationships.contained_in
+        target: swe.uml2tosca.instances.HadoopWorker01
+      - type: cloudify.relationships.depends_on
+        target: swe.uml2tosca.instances.Worker01JEE
+        
+  swe.uml2tosca.instances.Worker01TaskTracker:
+    type: swe.uml2tosca.nodes.Artifact
+    interfaces:
+      cloudify.interfaces.lifecycle:
+        configure:
+          implementation: ansible.ansible_plugin.tasks.configure
+          inputs:
+            user: { get_property: [ swe.uml2tosca.instances.HadoopMaster, cloudify_agent, user ] }
+            keypair: { get_input: key_file }
+            playbook: 'apache.yaml'
+            roles: {  get_input: roles_file }
+            private_ip_address: { get_attribute: [swe.uml2tosca.instances.HadoopMaster, ip] }
+        start:
+          implementation: ansible.ansible_plugin.tasks.ansible_playbook
+          inputs:
+            playbook: { get_input: playbook_file }
+    relationships:
+      - type: cloudify.relationships.contained_in
+        target: swe.uml2tosca.instances.HadoopWorker01
+      - type: cloudify.relationships.depends_on
+        target: swe.uml2tosca.instances.Worker01JEE

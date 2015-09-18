@@ -127,24 +127,4 @@ class TestAnsiblePluginUnitTests(testtools.TestCase):
                                playbook, ctx=ctx)
         self.assertIn("object has no attribute 'host_ip'",
                       ex.message)
-
-    def test_create_playbook_from_roles(self):
-        testname = __name__
-        ctx = self.get_mock_context(testname)
-        current_ctx.set(ctx=ctx)
-        
-        host = '127.0.0.1'
-        sudo = 'yes'
-        roles = ['testrole01']
-        
-        pb_file = "test.yaml"
-        
-        groundtruth = '- hosts: 127.0.0.1\n' \
-                      '  sudo: yes\n' \
-                      '  roles:\n' \
-                      '  - testrole01\n'
-        
-        pb_string = create_playbook_from_roles(host, roles, sudo)
-        
-        self.assertEquals(groundtruth, pb_string)
         

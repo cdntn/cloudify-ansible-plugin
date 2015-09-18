@@ -20,17 +20,11 @@ from cloudify import ctx
 from cloudify.decorators import operation
 
 from ansible_plugin import utils
-from context import CloudifyContext
-
-ctx = ctx()
-assert isinstance(ctx, CloudifyContext)
 
 # Third-party Imports
 # Cloudify imports
 @operation
-def configure(user, keypair, playbook, roles, private_ip_address, **kwargs):    
-    assert isinstance(ctx, CloudifyContext)
-    
+def configure(user, keypair, rolesfile, roles, private_ip_address,  playbook = None, **kwargs):
     ctx.logger.info('Configuring Ansible.')
     
     os.environ['USER'] = user
@@ -50,7 +44,7 @@ def configure(user, keypair, playbook, roles, private_ip_address, **kwargs):
         
     configuration = '[defaults]\n' \
                     'host_key_checking=False\n' \
-            'remote_user={0}\n'\
+                    'remote_user={0}\n'\
                     'private_key_file={1}\n'\
                     '[ssh_connection]\n'\
                     'control_path=%(directory)s/%%h-%%r\n'.format(user, path_to_key)
@@ -59,20 +53,26 @@ def configure(user, keypair, playbook, roles, private_ip_address, **kwargs):
     os.environ['ANSIBLE_CONFIG'] = file_path
     
     ctx.logger.info('Getting the path to the playbook.')
-    playbook_path = utils.get_playbook_path(playbook, ansible_home)
+    if playbook == None:
+        ctx.logger.info('No Playbook given, creating it from roles.')
+        hosts = [private_ip_address]
+        playbook_path = utils.create_playbook_from_roles(hosts, roles)
+    else:
+        playbook_path = utils.get_playbook_path(playbook, ansible_home)
+    
     ctx.logger.info('Got the playbook path: {}.'.format(playbook_path))
     
-    ctx.logger.info('Upload the roles file.')
-    roles_path = utils.get_roles(roles, ansible_home)
-    ctx.logger.info('Got the roles path: {}'.format(roles_path))
+    ctx.logger.info('Upload the rolesfile file.')
+    roles_path = utils.get_roles(rolesfile, ansible_home)
+    ctx.logger.info('Got the rolesfile path: {}'.format(roles_path))
     
-    ctx.logger.info('Unzip the roles file.')
+    ctx.logger.info('Unzip the rolesfile file.')
     command = ['unzip', '-o', roles_path,'-d', os.path.dirname(roles_path)] 
     ctx.logger.info('Running command: {}.'.format(command))
     output = utils.run_command(command)
     ctx.logger.info('Command Output: {}.'.format(output))
     
-    """ctx.logger.info('Delete the roles archive.')
+    """ctx.logger.info('Delete the rolesfile archive.')
     os.remove(roles_path)
     command = ['rm', '-rf', roles_path]
     ctx.logger.info('Running command: {}.'.format(command))
@@ -88,15 +88,12 @@ def configure(user, keypair, playbook, roles, private_ip_address, **kwargs):
 
 
 @operation
-def ansible_playbook(playbook, **kwargs):
-    cur_ctx = ctx()
-    assert isinstance(cur_ctx, CloudifyContext)
-    
+def ansible_playbook(playbook = 'playbook.yaml', **kwargs):    
     """ Runs a playbook as part of a Cloudify lifecycle operation """
     ansible_home = utils.get_ansible_home()
 
     executible = utils.get_executible_path('ansible-playbook')
-    inventory_path = os.path.join(ansible_home, '{}.inventory'.format(cur_ctx.deployment.id))
+    inventory_path = os.path.join(ansible_home, '{}.inventory'.format(ctx.deployment.id))
     playbook_path = os.path.join(ansible_home, playbook)
     
     os.environ['HOME'] = ansible_home
@@ -105,13 +102,13 @@ def ansible_playbook(playbook, **kwargs):
     command = [executible, '-i', inventory_path,
                playbook_path, '--timeout=60', '-vvvv']
 
-    cur_ctx.logger.info('Running command: {}.'.format(command))
+    ctx.logger.info('Running command: {}.'.format(command))
 
     output = utils.run_command(command)
 
-    cur_ctx.logger.info('Command Output: {}.'.format(output))
+    ctx.logger.info('Command Output: {}.'.format(output))
 
-    cur_ctx.logger.info('Finished running the Ansible Playbook.')
+    ctx.logger.info('Finished running the Ansible Playbook.')
     
     del os.environ['HOME']
     

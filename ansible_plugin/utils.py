@@ -20,13 +20,10 @@ from subprocess import Popen, PIPE
 
 from cloudify import ctx
 from cloudify import exceptions
-from context import CloudifyContext
 
 # Third-party Imports
 # Cloudify imports
 CLOUDIFY_MANAGER_PRIVATE_KEY_PATH = 'CLOUDIFY_MANAGER_PRIVATE_KEY_PATH'
-ctx = ctx()
-assert isinstance(ctx, CloudifyContext)
 
 def get_executible_path(executable_name):
 
@@ -50,8 +47,6 @@ def get_roles(roles, target_path):
 
 
 def get_playbook_path(playbook, target_path):
-    assert isinstance(ctx, CloudifyContext)
-
     try:
         path_to_file = ctx.download_resource(playbook, os.path.join(target_path, playbook))
     except exceptions.HttpException as e:
@@ -145,7 +140,8 @@ def get_ansible_home():
     home = os.path.expanduser("~")
     return os.path.join(home, '{}{}'.format('cloudify.', ctx.deployment.id), '{}'.format(ctx.instance.id))
 
-def create_playbook_from_roles(hosts, roles, sudo = 'no', path=None):
+def create_playbook_from_roles(hosts, roles, filename = 'playbook.yaml' , sudo = 'no', path=None):
+    
     if path == None:
         path = get_ansible_home()
         
@@ -160,14 +156,13 @@ def create_playbook_from_roles(hosts, roles, sudo = 'no', path=None):
     for role in roles:
         pb_string += '  - ' + role + '\n'
         
-    pb_file = 'test.yaml'
         
-    with open(os.path.join(path, pb_file), 'w') as f:
+    with open(os.path.join(path, filename), 'w') as f:
         f.write('{0}\n'.format(pb_string))
 
     f.close()
     
-    return pb_string
+    return os.path.join(path, filename)
     
     
     

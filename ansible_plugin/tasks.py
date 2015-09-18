@@ -15,23 +15,26 @@
 
 # Built-in Imports
 import os
-import shutil
 
-# Third-party Imports
-
-# Cloudify imports
 from cloudify import ctx
-from ansible_plugin import utils
 from cloudify.decorators import operation
 
+from ansible_plugin import utils
+from context import CloudifyContext
 
+ctx = ctx()
+assert isinstance(ctx, CloudifyContext)
+
+# Third-party Imports
+# Cloudify imports
 @operation
-def configure(user, keypair, playbook, roles, private_ip_address, **kwargs):
-
+def configure(user, keypair, playbook, roles, private_ip_address, **kwargs):    
+    assert isinstance(ctx, CloudifyContext)
+    
     ctx.logger.info('Configuring Ansible.')
     
     os.environ['USER'] = user
-    os.environ['HOME'] = home = os.path.expanduser("~")
+    os.environ['HOME'] = os.path.expanduser("~")
     
     ansible_home = utils.get_ansible_home()
     
@@ -53,6 +56,7 @@ def configure(user, keypair, playbook, roles, private_ip_address, **kwargs):
                     'control_path=%(directory)s/%%h-%%r\n'.format(user, path_to_key)
     
     file_path = utils.write_configuration_file(ansible_home, configuration)
+    os.environ['ANSIBLE_CONFIG'] = file_path
     
     ctx.logger.info('Getting the path to the playbook.')
     playbook_path = utils.get_playbook_path(playbook, ansible_home)
@@ -68,9 +72,9 @@ def configure(user, keypair, playbook, roles, private_ip_address, **kwargs):
     output = utils.run_command(command)
     ctx.logger.info('Command Output: {}.'.format(output))
     
-    ctx.logger.info('Delete the roles archive.')
+    """ctx.logger.info('Delete the roles archive.')
     os.remove(roles_path)
-    """command = ['rm', '-rf', roles_path]
+    command = ['rm', '-rf', roles_path]
     ctx.logger.info('Running command: {}.'.format(command))
     output = utils.run_command(command)
     ctx.logger.info('Command Output: {}.'.format(output))
@@ -85,11 +89,14 @@ def configure(user, keypair, playbook, roles, private_ip_address, **kwargs):
 
 @operation
 def ansible_playbook(playbook, **kwargs):
+    cur_ctx = ctx()
+    assert isinstance(cur_ctx, CloudifyContext)
+    
     """ Runs a playbook as part of a Cloudify lifecycle operation """
     ansible_home = utils.get_ansible_home()
 
     executible = utils.get_executible_path('ansible-playbook')
-    inventory_path = os.path.join(ansible_home, '{}.inventory'.format(ctx.deployment.id))
+    inventory_path = os.path.join(ansible_home, '{}.inventory'.format(cur_ctx.deployment.id))
     playbook_path = os.path.join(ansible_home, playbook)
     
     os.environ['HOME'] = ansible_home
@@ -98,12 +105,13 @@ def ansible_playbook(playbook, **kwargs):
     command = [executible, '-i', inventory_path,
                playbook_path, '--timeout=60', '-vvvv']
 
-    ctx.logger.info('Running command: {}.'.format(command))
+    cur_ctx.logger.info('Running command: {}.'.format(command))
 
     output = utils.run_command(command)
 
-    ctx.logger.info('Command Output: {}.'.format(output))
+    cur_ctx.logger.info('Command Output: {}.'.format(output))
 
-    ctx.logger.info('Finished running the Ansible Playbook.')
+    cur_ctx.logger.info('Finished running the Ansible Playbook.')
     
     del os.environ['HOME']
+    

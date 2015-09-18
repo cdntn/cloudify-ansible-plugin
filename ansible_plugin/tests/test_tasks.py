@@ -15,9 +15,9 @@
 
 
 import os
-import testtools
 
 from cloudify.workflows import local
+import testtools
 
 
 IGNORE = (
